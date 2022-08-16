@@ -1,6 +1,6 @@
 use async_std::{io::WriteExt, net::TcpListener, stream::StreamExt};
 use futures::future::join_all;
-use lci_gateway::{GeneratorState, SwitchState, HvacFan, HvacMode, DeviceType, OnlineState};
+use lci_gateway::{DeviceType, GeneratorState, HvacFan, HvacMode, OnlineState, SwitchState};
 
 // TODO: code cleanup if I'm in here enough.
 // Otherwise, I'm sad to say copy and paste is messy,
@@ -34,10 +34,10 @@ async fn respond(
 
     let metrics: String = join_all(things.into_iter().map(|thing| async move {
         match thing.get_type() {
-            Some(DeviceType::Tank) => Some(log_tank(thing).await.map_err(|_|())),
-            Some(DeviceType::Hvac) => Some(log_hvac(thing).await.map_err(|_|())),
-            Some(DeviceType::Generator) => Some(log_generator(thing).await.map_err(|_|())),
-            Some(DeviceType::Switch) => Some(log_switch(thing).await.map_err(|_|())),
+            Some(DeviceType::Tank) => Some(log_tank(thing).await.map_err(|_| ())),
+            Some(DeviceType::Hvac) => Some(log_hvac(thing).await.map_err(|_| ())),
+            Some(DeviceType::Generator) => Some(log_generator(thing).await.map_err(|_| ())),
+            Some(DeviceType::Switch) => Some(log_switch(thing).await.map_err(|_| ())),
             _ => None,
         }
     }))
@@ -78,7 +78,7 @@ async fn log_tank(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Tank
 
     let res = tank.level().await;
     if let Ok(value) = res {
-    let help = format!("# HELP {field} Tank percentage\n");
+        let help = format!("# HELP {field} Tank percentage\n");
         buffer.push_str(&help);
         let metric_type = format!("# TYPE {field} gauge\n");
         buffer.push_str(&metric_type);
@@ -110,7 +110,11 @@ async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Hvac
         let add = format!("{field} {value}\n");
         buffer.push_str(&add);
     } else {
-        log::warn!("Faild to build hvac outside temp for {} due to {:?}", hvac.label(), res);
+        log::warn!(
+            "Faild to build hvac outside temp for {} due to {:?}",
+            hvac.label(),
+            res
+        );
     }
 
     let res = hvac.inside_temprature().await;
@@ -123,7 +127,11 @@ async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Hvac
         let add = format!("{field} {value}\n");
         buffer.push_str(&add);
     } else {
-        log::warn!("Faild to build hvac inside temp for {} due to {:?}", hvac.label(), res);
+        log::warn!(
+            "Faild to build hvac inside temp for {} due to {:?}",
+            hvac.label(),
+            res
+        );
     }
 
     let res = hvac.fan().await;
@@ -143,7 +151,11 @@ async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Hvac
         let add = format!("{field} {state}\n");
         buffer.push_str(&add);
     } else {
-        log::warn!("Failed to build hvac fan for {} due to {:?}", hvac.label(), res);
+        log::warn!(
+            "Failed to build hvac fan for {} due to {:?}",
+            hvac.label(),
+            res
+        );
     }
 
     let res = hvac.mode().await;
@@ -163,7 +175,50 @@ async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Hvac
         let add = format!("{field} {state}\n");
         buffer.push_str(&add);
     } else {
-        log::warn!("Failed to build hvac mode for {}, due to {:?}", hvac.label(), res);
+        log::warn!(
+            "Failed to build hvac mode for {}, due to {:?}",
+            hvac.label(),
+            res
+        );
+    }
+
+    let res = hvac.high_temp().await;
+    if let Ok(state) = res {
+        let field = format!("{field_base}_high_temperature");
+        let add =
+            format!("# HELP {field} The hottest the A/C is set to allow without operating.\n",);
+        buffer.push_str(&add);
+        let add = format!("# TYPE {field} gauge\n");
+        buffer.push_str(&add);
+        let state = state as u8;
+        let add = format!("{field} {state}\n");
+        buffer.push_str(&add);
+    } else {
+        log::warn!(
+            "Failed to build hvac high_temperature for {}, due to {:?}",
+            hvac.label(),
+            res
+        );
+    }
+
+    let res = hvac.low_temp().await;
+    if let Ok(state) = res {
+        let field = format!("{field_base}_low_temperature");
+        let add = format!(
+            "# HELP {field} The lowest the furnace or A/C is set to allow without operating.\n",
+        );
+        buffer.push_str(&add);
+        let add = format!("# TYPE {field} gauge\n");
+        buffer.push_str(&add);
+        let state = state as u8;
+        let add = format!("{field} {state}\n");
+        buffer.push_str(&add);
+    } else {
+        log::warn!(
+            "Failed to build hvac low_temperature for {}, due to {:?}",
+            hvac.label(),
+            res
+        );
     }
 
     // TODO: hvac.status()
@@ -195,7 +250,11 @@ async fn log_generator(thing: lci_gateway::Thing) -> Result<String, lci_gateway:
         buffer.push_str(&add);
         log::debug!("Responding with built generator for {}", generator.label());
     } else {
-        log::warn!("Failed to build generator {} due to {:?}", generator.label(), res);
+        log::warn!(
+            "Failed to build generator {} due to {:?}",
+            generator.label(),
+            res
+        );
     }
 
     Ok(buffer)
@@ -218,7 +277,11 @@ async fn log_switch(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Sw
         let add = format!("{field} {value}\n");
         buffer.push_str(&add);
     } else {
-        log::info!("Faild to get switch relay current for {} due to {:?}", switch.label(), res);
+        log::info!(
+            "Faild to get switch relay current for {} due to {:?}",
+            switch.label(),
+            res
+        );
     }
 
     let res = switch.state().await;
@@ -236,7 +299,11 @@ async fn log_switch(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Sw
         buffer.push_str(&add);
         log::debug!("Built switch state for {}", switch.label());
     } else {
-        log::warn!("Faild to get switch state for {} due to {:?}", switch.label(), res);
+        log::warn!(
+            "Faild to get switch state for {} due to {:?}",
+            switch.label(),
+            res
+        );
     }
 
     let res = switch.fault().await;
@@ -255,7 +322,11 @@ async fn log_switch(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Sw
         log::debug!("Built switch fault state for {}", switch.label());
     } else {
         // Not a warn since not all switches have fault states.
-        log::info!("Failed to build switch fault state for {} due to {:?}.", switch.label(), res);
+        log::info!(
+            "Failed to build switch fault state for {} due to {:?}.",
+            switch.label(),
+            res
+        );
     }
 
     Ok(buffer)
@@ -282,7 +353,11 @@ async fn get_online_state(thing: &lci_gateway::Thing) -> Option<String> {
         log::trace!("Built online state for {}", thing.label());
         Some(buffer)
     } else {
-        log::warn!("Failed to build online state for {} due to {:?}.", thing.label(), res);
+        log::warn!(
+            "Failed to build online state for {} due to {:?}.",
+            thing.label(),
+            res
+        );
         None
     }
 }
