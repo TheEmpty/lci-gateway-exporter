@@ -1,6 +1,5 @@
 # Not working on Alpine atm
 # FROM alpine:3.16
-# FROM ubuntu:22.04
 FROM rust:1.63-slim-buster
 
 # Alpine block

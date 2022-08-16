@@ -1,6 +1,10 @@
 use async_std::{io::WriteExt, net::TcpListener, stream::StreamExt};
 use futures::future::join_all;
-use lci_gateway::{GeneratorState, HvacFan, HvacMode};
+use lci_gateway::{GeneratorState, SwitchState, HvacFan, HvacMode, DeviceType, OnlineState};
+
+// TODO: code cleanup if I'm in here enough.
+// Otherwise, I'm sad to say copy and paste is messy,
+// but good enough.
 
 #[tokio::main]
 async fn main() {
@@ -20,13 +24,6 @@ async fn main() {
     }
 }
 
-#[derive(Debug)]
-enum RespondError {
-    ThingError(lci_gateway::ThingError),
-    UnknownError,
-    IoError(std::io::Error),
-}
-
 async fn respond(
     stream: Result<async_std::net::TcpStream, std::io::Error>,
 ) -> Result<(), RespondError> {
@@ -37,9 +34,10 @@ async fn respond(
 
     let metrics: String = join_all(things.into_iter().map(|thing| async move {
         match thing.get_type() {
-            Some(lci_gateway::DeviceType::Tank) => Some(log_tank(thing).await),
-            Some(lci_gateway::DeviceType::Hvac) => Some(log_hvac(thing).await),
-            Some(lci_gateway::DeviceType::Generator) => Some(log_generator(thing).await),
+            Some(DeviceType::Tank) => Some(log_tank(thing).await.map_err(|_|())),
+            Some(DeviceType::Hvac) => Some(log_hvac(thing).await.map_err(|_|())),
+            Some(DeviceType::Generator) => Some(log_generator(thing).await.map_err(|_|())),
+            Some(DeviceType::Switch) => Some(log_switch(thing).await.map_err(|_|())),
             _ => None,
         }
     }))
@@ -71,49 +69,65 @@ async fn respond(
     Ok(())
 }
 
-async fn log_tank(thing: lci_gateway::Thing) -> Result<String, ()> {
+async fn log_tank(thing: lci_gateway::Thing) -> Result<String, lci_gateway::TankError> {
     log::trace!("Building tank response for {}", thing.label());
+    let mut buffer = get_online_state(&thing).await.unwrap_or("".to_string());
     let normalized = thing.label().replace(" ", "_").to_lowercase();
     let tank = lci_gateway::Tank::new(thing)?;
     let field = format!("lci_gateway_{normalized}");
-    let mut buffer = "".to_string();
 
+    let res = tank.level().await;
+    if let Ok(value) = res {
     let help = format!("# HELP {field} Tank percentage\n");
-    buffer.push_str(&help);
-    let metric_type = format!("# TYPE {field} gauge\n");
-    buffer.push_str(&metric_type);
-    let value = format!("{field} {value}\n", value = tank.level().await);
-    buffer.push_str(&value);
-    log::debug!("Responding with built tank for {}", tank.label());
+        buffer.push_str(&help);
+        let metric_type = format!("# TYPE {field} gauge\n");
+        buffer.push_str(&metric_type);
+        let usage = value.value();
+        let row = format!("{field} {usage}\n");
+        buffer.push_str(&row);
+        log::debug!("Responding with built tank for {}", tank.label());
+    } else {
+        log::warn!("Failed to build tank for {} due to {:?}", tank.label(), res);
+    }
+
     Ok(buffer)
 }
 
-async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, ()> {
+async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, lci_gateway::HvacError> {
     log::trace!("Building hvac response for {}", thing.label());
+    let mut buffer = get_online_state(&thing).await.unwrap_or("".to_string());
     let normalized = thing.label().replace(" ", "_").to_lowercase();
     let hvac = lci_gateway::HVAC::new(thing)?;
     let field_base = format!("lci_gateway_{normalized}");
-    let mut buffer = "".to_string();
 
-    let field = format!("{field_base}_outside_temprature");
-    let value = hvac.outside_temprature().await;
-    let add = format!("# HELP {field} HVAC outside temprature\n");
-    buffer.push_str(&add);
-    let add = format!("# TYPE {field} gauge\n");
-    buffer.push_str(&add);
-    let add = format!("{field} {value}\n");
-    buffer.push_str(&add);
+    let res = hvac.outside_temprature().await;
+    if let Ok(value) = res {
+        let field = format!("{field_base}_outside_temprature");
+        let add = format!("# HELP {field} HVAC outside temprature\n");
+        buffer.push_str(&add);
+        let add = format!("# TYPE {field} gauge\n");
+        buffer.push_str(&add);
+        let add = format!("{field} {value}\n");
+        buffer.push_str(&add);
+    } else {
+        log::warn!("Faild to build hvac outside temp for {} due to {:?}", hvac.label(), res);
+    }
 
-    let field = format!("{field_base}_inside_temprature");
-    let value = hvac.inside_temprature().await;
-    let add = format!("# HELP {field} HVAC inside temprature\n");
-    buffer.push_str(&add);
-    let add = format!("# TYPE {field} gauge\n");
-    buffer.push_str(&add);
-    let add = format!("{field} {value}\n");
-    buffer.push_str(&add);
+    let res = hvac.inside_temprature().await;
+    if let Ok(value) = res {
+        let field = format!("{field_base}_inside_temprature");
+        let add = format!("# HELP {field} HVAC inside temprature\n");
+        buffer.push_str(&add);
+        let add = format!("# TYPE {field} gauge\n");
+        buffer.push_str(&add);
+        let add = format!("{field} {value}\n");
+        buffer.push_str(&add);
+    } else {
+        log::warn!("Faild to build hvac inside temp for {} due to {:?}", hvac.label(), res);
+    }
 
-    if let Ok(state) = hvac.fan().await {
+    let res = hvac.fan().await;
+    if let Ok(state) = res {
         let field = format!("{field_base}_fan");
         // TODO: move this to a proc macro over states. There are 18 values for state.
         let add = format!(
@@ -128,9 +142,12 @@ async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, ()> {
         let state = state as u8;
         let add = format!("{field} {state}\n");
         buffer.push_str(&add);
+    } else {
+        log::warn!("Failed to build hvac fan for {} due to {:?}", hvac.label(), res);
     }
 
-    if let Ok(state) = hvac.mode().await {
+    let res = hvac.mode().await;
+    if let Ok(state) = res {
         let field = format!("{field_base}_mode");
         let add = format!(
             "# HELP {field} A/C mode. Off = {}, Heat = {}, Cool = {}, Heat-Cool = {}\n",
@@ -145,6 +162,8 @@ async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, ()> {
         let state = state as u8;
         let add = format!("{field} {state}\n");
         buffer.push_str(&add);
+    } else {
+        log::warn!("Failed to build hvac mode for {}, due to {:?}", hvac.label(), res);
     }
 
     // TODO: hvac.status()
@@ -153,14 +172,15 @@ async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, ()> {
     Ok(buffer)
 }
 
-async fn log_generator(thing: lci_gateway::Thing) -> Result<String, ()> {
+async fn log_generator(thing: lci_gateway::Thing) -> Result<String, lci_gateway::GeneratorError> {
     log::trace!("Building generator response for {}", thing.label());
+    let mut buffer = get_online_state(&thing).await.unwrap_or("".to_string());
     let normalized = thing.label().replace(" ", "_").to_lowercase();
     let generator = lci_gateway::Generator::new(thing)?;
     let field = format!("lci_gateway_{normalized}_state");
-    let mut buffer = "".to_string();
 
-    if let Ok(state) = generator.state().await {
+    let res = generator.state().await;
+    if let Ok(state) = res {
         let add = format!(
             "# HELP {field} Generator state. Off = {}, Priming = {}, Starting = {}, Running = {}\n",
             GeneratorState::Off as u8,
@@ -175,26 +195,114 @@ async fn log_generator(thing: lci_gateway::Thing) -> Result<String, ()> {
         buffer.push_str(&add);
         log::debug!("Responding with built generator for {}", generator.label());
     } else {
-        log::debug!("Not enough information to build {}", generator.label());
+        log::warn!("Failed to build generator {} due to {:?}", generator.label(), res);
     }
 
     Ok(buffer)
 }
 
+async fn log_switch(thing: lci_gateway::Thing) -> Result<String, lci_gateway::SwitchError> {
+    log::trace!("Building switch response for {}", thing.label());
+    let mut buffer = get_online_state(&thing).await.unwrap_or("".to_string());
+    let normalized = thing.label().replace(" ", "_").to_lowercase();
+    let switch = lci_gateway::Switch::new(thing)?;
+    let field_base = format!("lci_gateway_{normalized}");
+
+    let res = switch.relay_current().await;
+    if let Ok(value) = res {
+        let field = format!("{field_base}_relay_current");
+        let add = format!("# HELP {field} Switch relay current\n");
+        buffer.push_str(&add);
+        let add = format!("# TYPE {field} gauge\n");
+        buffer.push_str(&add);
+        let add = format!("{field} {value}\n");
+        buffer.push_str(&add);
+    } else {
+        log::info!("Faild to get switch relay current for {} due to {:?}", switch.label(), res);
+    }
+
+    let res = switch.state().await;
+    if let Ok(state) = res {
+        let field = format!("{field_base}_state");
+        let add = format!(
+            "# HELP {field} Switch state. Off = {}, On = {}\n",
+            SwitchState::Off as u8,
+            SwitchState::On as u8,
+        );
+        buffer.push_str(&add);
+        let add = format!("# TYPE {field} gauge\n");
+        buffer.push_str(&add);
+        let add = format!("{field} {}\n", state as u8);
+        buffer.push_str(&add);
+        log::debug!("Built switch state for {}", switch.label());
+    } else {
+        log::warn!("Faild to get switch state for {} due to {:?}", switch.label(), res);
+    }
+
+    let res = switch.fault().await;
+    if let Ok(state) = res {
+        let field = format!("{field_base}_fault");
+        let add = format!(
+            "# HELP {field} Switch state. Off = {}, On = {}\n",
+            SwitchState::Off as u8,
+            SwitchState::On as u8,
+        );
+        buffer.push_str(&add);
+        let add = format!("# TYPE {field} gauge\n");
+        buffer.push_str(&add);
+        let add = format!("{field} {}\n", state as u8);
+        buffer.push_str(&add);
+        log::debug!("Built switch fault state for {}", switch.label());
+    } else {
+        // Not a warn since not all switches have fault states.
+        log::info!("Failed to build switch fault state for {} due to {:?}.", switch.label(), res);
+    }
+
+    Ok(buffer)
+}
+
+async fn get_online_state(thing: &lci_gateway::Thing) -> Option<String> {
+    log::trace!("Building online state for {}", thing.label());
+    let res = thing.online().await;
+    if let Ok(state) = res {
+        let mut buffer = "".to_string();
+        let normalized = thing.label().replace(" ", "_").to_lowercase();
+        let field = format!("lci_gateway_{normalized}_online");
+        let add = format!(
+            "# HELP {field} Online state, Offline = {}, Online = {}, Locked = {}\n",
+            OnlineState::Offline as u8,
+            OnlineState::Online as u8,
+            OnlineState::Locked as u8,
+        );
+        buffer.push_str(&add);
+        let add = format!("# TYPE {field} gauge\n");
+        buffer.push_str(&add);
+        let add = format!("{field} {}\n", state as u8);
+        buffer.push_str(&add);
+        log::trace!("Built online state for {}", thing.label());
+        Some(buffer)
+    } else {
+        log::warn!("Failed to build online state for {} due to {:?}.", thing.label(), res);
+        None
+    }
+}
+
+#[derive(Debug)]
+enum RespondError {
+    ThingError(lci_gateway::ThingError),
+    IoError(std::io::Error),
+}
+
 impl From<lci_gateway::ThingError> for RespondError {
     fn from(error: lci_gateway::ThingError) -> Self {
+        log::error!("Thing error = {:?}", error);
         RespondError::ThingError(error)
     }
 }
 
 impl From<std::io::Error> for RespondError {
     fn from(error: std::io::Error) -> Self {
+        log::error!("STD IO Error = {:?}", error);
         RespondError::IoError(error)
-    }
-}
-
-impl From<()> for RespondError {
-    fn from(_error: ()) -> Self {
-        RespondError::UnknownError
     }
 }
