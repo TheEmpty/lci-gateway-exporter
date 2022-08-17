@@ -1,6 +1,8 @@
 use async_std::{io::WriteExt, net::TcpListener, stream::StreamExt};
 use futures::future::join_all;
-use lci_gateway::{DeviceType, GeneratorState, HvacFan, HvacMode, OnlineState, SwitchState};
+use lci_gateway::{
+    DeviceType, GeneratorState, HvacFan, HvacMode, HvacStatus, OnlineState, SwitchState,
+};
 
 // TODO: code cleanup if I'm in here enough.
 // Otherwise, I'm sad to say copy and paste is messy,
@@ -43,10 +45,7 @@ async fn respond(
     }))
     .await
     .into_iter()
-    .filter_map(|row| match row {
-        Some(row) => Some(row.unwrap()),
-        None => None,
-    })
+    .filter_map(|row| row.map(Result::unwrap))
     .collect::<Vec<String>>()
     .join("\n");
 
@@ -71,8 +70,10 @@ async fn respond(
 
 async fn log_tank(thing: lci_gateway::Thing) -> Result<String, lci_gateway::TankError> {
     log::trace!("Building tank response for {}", thing.label());
-    let mut buffer = get_online_state(&thing).await.unwrap_or("".to_string());
-    let normalized = thing.label().replace(" ", "_").to_lowercase();
+    let mut buffer = get_online_state(&thing)
+        .await
+        .unwrap_or_else(|| "".to_string());
+    let normalized = thing.label().replace(' ', "_").to_lowercase();
     let tank = lci_gateway::Tank::new(thing)?;
     let field = format!("lci_gateway_{normalized}");
 
@@ -95,8 +96,10 @@ async fn log_tank(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Tank
 
 async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, lci_gateway::HvacError> {
     log::trace!("Building hvac response for {}", thing.label());
-    let mut buffer = get_online_state(&thing).await.unwrap_or("".to_string());
-    let normalized = thing.label().replace(" ", "_").to_lowercase();
+    let mut buffer = get_online_state(&thing)
+        .await
+        .unwrap_or_else(|| "".to_string());
+    let normalized = thing.label().replace(' ', "_").to_lowercase();
     let hvac = lci_gateway::HVAC::new(thing)?;
     let field_base = format!("lci_gateway_{normalized}");
 
@@ -153,6 +156,45 @@ async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Hvac
     } else {
         log::warn!(
             "Failed to build hvac fan for {} due to {:?}",
+            hvac.label(),
+            res
+        );
+    }
+
+    let res = hvac.status().await;
+    if let Ok(state) = res {
+        let field = format!("{field_base}_status");
+        // TODO: move this to a proc macro over states. There are 18 values for state.
+        let add = format!(
+            "# HELP {field} HVAC state. Off = {}, Idle = {}, Cooling = {}, Heat Pump = {}, Electric Furnace = {}, Gas Furnace = {}, Gas Override = {}, Dead Time = {}, Load Shedding = {}, Fail Off = {}, Fail Idle = {}, Fail Cooling = {}, Fail Heat Pump = {}, Fail Electric Furnace = {}, Fail Gas Furnace = {}, Fail Gas Override = {}, Fail Dead Time = {}, Fail Shedding = {}\n",
+            HvacStatus::Off as u8,
+            HvacStatus::Idle as u8,
+            HvacStatus::Cooling as u8,
+            HvacStatus::HeatPump as u8,
+            HvacStatus::ElectricFurnace as u8,
+            HvacStatus::GasFurnace as u8,
+            HvacStatus::GasOverride as u8,
+            HvacStatus::DeadTime as u8,
+            HvacStatus::LoadShedding as u8,
+            HvacStatus::FailOff as u8,
+            HvacStatus::FailIdle as u8,
+            HvacStatus::FailCooling as u8,
+            HvacStatus::FailHeatPump as u8,
+            HvacStatus::FailElectricFurnace as u8,
+            HvacStatus::FailGasFurnace as u8,
+            HvacStatus::FailGasOverride as u8,
+            HvacStatus::FailDeadTime as u8,
+            HvacStatus::FailShedding as u8,
+        );
+        buffer.push_str(&add);
+        let add = format!("# TYPE {field} gauge\n");
+        buffer.push_str(&add);
+        let state = state as u8;
+        let add = format!("{field} {state}\n");
+        buffer.push_str(&add);
+    } else {
+        log::warn!(
+            "Failed to build hvac status for {} due to {:?}",
             hvac.label(),
             res
         );
@@ -229,8 +271,10 @@ async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Hvac
 
 async fn log_generator(thing: lci_gateway::Thing) -> Result<String, lci_gateway::GeneratorError> {
     log::trace!("Building generator response for {}", thing.label());
-    let mut buffer = get_online_state(&thing).await.unwrap_or("".to_string());
-    let normalized = thing.label().replace(" ", "_").to_lowercase();
+    let mut buffer = get_online_state(&thing)
+        .await
+        .unwrap_or_else(|| "".to_string());
+    let normalized = thing.label().replace(' ', "_").to_lowercase();
     let generator = lci_gateway::Generator::new(thing)?;
     let field = format!("lci_gateway_{normalized}_state");
 
@@ -262,8 +306,10 @@ async fn log_generator(thing: lci_gateway::Thing) -> Result<String, lci_gateway:
 
 async fn log_switch(thing: lci_gateway::Thing) -> Result<String, lci_gateway::SwitchError> {
     log::trace!("Building switch response for {}", thing.label());
-    let mut buffer = get_online_state(&thing).await.unwrap_or("".to_string());
-    let normalized = thing.label().replace(" ", "_").to_lowercase();
+    let mut buffer = get_online_state(&thing)
+        .await
+        .unwrap_or_else(|| "".to_string());
+    let normalized = thing.label().replace(' ', "_").to_lowercase();
     let switch = lci_gateway::Switch::new(thing)?;
     let field_base = format!("lci_gateway_{normalized}");
 
@@ -337,7 +383,7 @@ async fn get_online_state(thing: &lci_gateway::Thing) -> Option<String> {
     let res = thing.online().await;
     if let Ok(state) = res {
         let mut buffer = "".to_string();
-        let normalized = thing.label().replace(" ", "_").to_lowercase();
+        let normalized = thing.label().replace(' ', "_").to_lowercase();
         let field = format!("lci_gateway_{normalized}_online");
         let add = format!(
             "# HELP {field} Online state, Offline = {}, Online = {}, Locked = {}\n",

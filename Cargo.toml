@@ -1,6 +1,6 @@
 [package]
 name = "lci-gateway-exporter"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 authors = ["Myles Empty Best"]
 license = "MIT OR Apache-2.0"
@@ -8,7 +8,7 @@ homepage = "https://github.com/TheEmpty/lci-gateway-exporter"
 repository = "https://github.com/TheEmpty/lci-gateway-exporter"
 
 [dependencies]
-lci-gateway = "0.7.1"
+lci-gateway = "0.8.0"
 # lci-gateway = { path = "../lci-gateway" }
 env_logger = "0.8.4"
 tokio = { version = "1.20.1", features = ["full"] }

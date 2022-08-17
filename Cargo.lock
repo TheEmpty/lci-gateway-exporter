@@ -610,9 +610,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "lci-gateway"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a45d3911f7a2bc3350d4910191aa193f01c4ce2e72e741d55f7119647de51855"
+checksum = "1474b119931e7b08d038b81b6aa757e1b70536dee42f9c4c18fa01909e8bd004"
 dependencies = [
  "derive-getters",
  "log",
@@ -623,7 +623,7 @@ dependencies = [
 
 [[package]]
 name = "lci-gateway-exporter"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "async-std",
  "env_logger",
