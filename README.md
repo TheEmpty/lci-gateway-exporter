@@ -12,6 +12,12 @@ Quick start: `docker run -p 8888:8888 theempty/lci-gateway-exporter:latest`
 
 Currently no supported configurable settings.
 
+## Example Dashboards
+### HVAC
+Note: Battery percentage and charging status is coming from Victron.
+
+![HVAC Dashboard](examples/hvac-dashboard.png)
+
 ## Example output
 
 ```
