@@ -40,6 +40,7 @@ async fn respond(
             Some(DeviceType::Hvac) => Some(log_hvac(thing).await.map_err(|_| ())),
             Some(DeviceType::Generator) => Some(log_generator(thing).await.map_err(|_| ())),
             Some(DeviceType::Switch) => Some(log_switch(thing).await.map_err(|_| ())),
+            Some(DeviceType::Dimmer) => Some(log_dimmer(thing).await.map_err(|_| ())),
             _ => None,
         }
     }))
@@ -263,8 +264,6 @@ async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Hvac
         );
     }
 
-    // TODO: hvac.status()
-
     log::debug!("Responding with built hvac for {}", hvac.label());
     Ok(buffer)
 }
@@ -371,6 +370,36 @@ async fn log_switch(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Sw
         log::info!(
             "Failed to build switch fault state for {} due to {:?}.",
             switch.label(),
+            res
+        );
+    }
+
+    Ok(buffer)
+}
+
+async fn log_dimmer(thing: lci_gateway::Thing) -> Result<String, lci_gateway::DimmerError> {
+    log::trace!("Building switch response for {}", thing.label());
+    let mut buffer = get_online_state(&thing)
+        .await
+        .unwrap_or_else(|| "".to_string());
+    let normalized = thing.label().replace(' ', "_").to_lowercase();
+    let dimmer = lci_gateway::Dimmer::new(thing)?;
+    let field_base = format!("lci_gateway_{normalized}");
+
+    let res = dimmer.brightness().await;
+    if let Ok(percentage) = res {
+        let field = format!("{field_base}_brightness");
+        let add = format!("# HELP {field} Dimmer brightness percent, 0 to 100.\n");
+        buffer.push_str(&add);
+        let add = format!("# TYPE {field} gauge\n");
+        buffer.push_str(&add);
+        let add = format!("{field} {}\n", percentage.value());
+        buffer.push_str(&add);
+        log::debug!("Built dimmer brightness for {}", dimmer.label());
+    } else {
+        log::warn!(
+            "Failed to get dimmer brightness for {} due to {:?}.",
+            dimmer.label(),
             res
         );
     }

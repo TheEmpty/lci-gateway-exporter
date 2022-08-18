@@ -1,6 +1,6 @@
 # LCI Gateway Exporter
 
-Currently only exports Generator, HVAC, and Tanks.
+Currently exports: Generator, HVAC, Tanks, Switches, and Dimmers.
 Makes a great companion to something like [Prometheus](https://prometheus.io/) and [Grafana.](https://grafana.com/)
 Allowing you to create alarms for things HVAC temprature, tank level, or genrator run time.
 This must be run on the same network as your LCI gateway. Eg, you should be able to see a JSON response [from the gateway.](http://192.168.1.4:8080/rest/things/)
@@ -177,9 +177,3 @@ lci_gateway_generator_fuel_tank_online 1
 # TYPE lci_gateway_generator_fuel_tank gauge
 lci_gateway_generator_fuel_tank 0
 ```
-
-### TODO
-* HVAC State
-
-### Unplanned
-* Dimmers
