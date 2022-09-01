@@ -5,7 +5,7 @@ Makes a great companion to something like [Prometheus](https://prometheus.io/) a
 Allowing you to create alarms for things HVAC temprature, tank level, or genrator run time.
 This must be run on the same network as your LCI gateway. Eg, you should be able to see a JSON response [from the gateway.](http://192.168.1.4:8080/rest/things/)
 
-**Disclaimer:** Not officaily supported. Developer(s) not associated with the LCI brand or company.
+**Disclaimer:** Not officially supported. Developer(s) not associated with the LCI brand or company.
 
 ## Docker Image
 Quick start: `docker run -p 8888:8888 theempty/lci-gateway-exporter:latest`
@@ -18,7 +18,18 @@ Note: Battery percentage and charging status is coming from Victron.
 
 ![HVAC Dashboard](examples/hvac-dashboard.png)
 
-## Example output
+## _You might also like_
+
+### [Generator Manager](https://github.com/TheEmpty/generator-manager)
+Requires: Victron system and an LCI gateway with a generator.
+
+Automatically start the generator when low battery is reach (configurable percentage),
+stopping when the battery reaches your configured threshold. The generator manager
+will also change your AC input limit as you've configured when using the generator
+and switch back to your shore limit when the generator is off. Even if you manually
+start the generator.
+
+## Example metrics output
 
 ```
 # HELP lci_gateway_living_room_climate_zone_online Online state, Offline = 0, Online = 1, Locked = 2

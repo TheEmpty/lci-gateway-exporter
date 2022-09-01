@@ -3,7 +3,7 @@ name = "lci-gateway-exporter"
 version = "0.2.4"
 edition = "2021"
 authors = ["Myles Empty Best"]
-license = "MIT OR Apache-2.0"
+license = "MIT" # Limited by deps
 homepage = "https://github.com/TheEmpty/lci-gateway-exporter"
 repository = "https://github.com/TheEmpty/lci-gateway-exporter"
 
