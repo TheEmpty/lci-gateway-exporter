@@ -71,9 +71,7 @@ async fn respond(
 
 async fn log_tank(thing: lci_gateway::Thing) -> Result<String, lci_gateway::TankError> {
     log::trace!("Building tank response for {}", thing.label());
-    let mut buffer = get_online_state(&thing)
-        .await
-        .unwrap_or_else(|| "".to_string());
+    let mut buffer = get_online_state(&thing).await.unwrap_or_default();
     let normalized = thing.label().replace(' ', "_").to_lowercase();
     let tank = lci_gateway::Tank::new(thing)?;
     let field = format!("lci_gateway_{normalized}");
@@ -97,9 +95,7 @@ async fn log_tank(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Tank
 
 async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, lci_gateway::HvacError> {
     log::trace!("Building hvac response for {}", thing.label());
-    let mut buffer = get_online_state(&thing)
-        .await
-        .unwrap_or_else(|| "".to_string());
+    let mut buffer = get_online_state(&thing).await.unwrap_or_default();
     let normalized = thing.label().replace(' ', "_").to_lowercase();
     let hvac = lci_gateway::HVAC::new(thing)?;
     let field_base = format!("lci_gateway_{normalized}");
@@ -270,9 +266,7 @@ async fn log_hvac(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Hvac
 
 async fn log_generator(thing: lci_gateway::Thing) -> Result<String, lci_gateway::GeneratorError> {
     log::trace!("Building generator response for {}", thing.label());
-    let mut buffer = get_online_state(&thing)
-        .await
-        .unwrap_or_else(|| "".to_string());
+    let mut buffer = get_online_state(&thing).await.unwrap_or_default();
     let normalized = thing.label().replace(' ', "_").to_lowercase();
     let generator = lci_gateway::Generator::new(thing)?;
     let field = format!("lci_gateway_{normalized}_state");
@@ -305,9 +299,7 @@ async fn log_generator(thing: lci_gateway::Thing) -> Result<String, lci_gateway:
 
 async fn log_switch(thing: lci_gateway::Thing) -> Result<String, lci_gateway::SwitchError> {
     log::trace!("Building switch response for {}", thing.label());
-    let mut buffer = get_online_state(&thing)
-        .await
-        .unwrap_or_else(|| "".to_string());
+    let mut buffer = get_online_state(&thing).await.unwrap_or_default();
     let normalized = thing.label().replace(' ', "_").to_lowercase();
     let switch = lci_gateway::Switch::new(thing)?;
     let field_base = format!("lci_gateway_{normalized}");
@@ -379,9 +371,7 @@ async fn log_switch(thing: lci_gateway::Thing) -> Result<String, lci_gateway::Sw
 
 async fn log_dimmer(thing: lci_gateway::Thing) -> Result<String, lci_gateway::DimmerError> {
     log::trace!("Building switch response for {}", thing.label());
-    let mut buffer = get_online_state(&thing)
-        .await
-        .unwrap_or_else(|| "".to_string());
+    let mut buffer = get_online_state(&thing).await.unwrap_or_default();
     let normalized = thing.label().replace(' ', "_").to_lowercase();
     let dimmer = lci_gateway::Dimmer::new(thing)?;
     let field_base = format!("lci_gateway_{normalized}");
